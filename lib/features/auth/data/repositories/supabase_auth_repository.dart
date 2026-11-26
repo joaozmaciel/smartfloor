@@ -5,7 +5,7 @@ import '../../domain/repositories/auth_repository.dart';
 
 class SupabaseAuthRepository implements AuthRepository {
   SupabaseAuthRepository({SupabaseClient? client})
-      : _client = client ?? Supabase.instance.client;
+    : _client = client ?? Supabase.instance.client;
 
   final SupabaseClient _client;
 
@@ -46,6 +46,8 @@ class SupabaseAuthRepository implements AuthRepository {
         'cep': cep,
         'city': city,
         'age': age,
+        'terms_version': '2026-11',
+        'terms_accepted_at': DateTime.now().toUtc().toIso8601String(),
       },
     );
     final user = response.user;
@@ -66,9 +68,6 @@ class SupabaseAuthRepository implements AuthRepository {
         ? metadataName
         : user.email?.split('@').first ?? '';
 
-    return AuthUser(
-      name: name,
-      email: user.email ?? '',
-    );
+    return AuthUser(name: name, email: user.email ?? '');
   }
 }

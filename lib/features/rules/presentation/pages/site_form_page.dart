@@ -7,17 +7,24 @@ import '../../../plan/domain/entities/plan.dart';
 import '../../domain/entities/floor_plan_site_analysis.dart';
 import '../../domain/entities/rule_settings.dart';
 import '../../domain/entities/site.dart';
+import '../../domain/entities/analysis_input.dart';
 import 'alerts_page.dart';
 
 /// Formulário do terreno e dos parâmetros do município.
 class SiteFormPage extends StatefulWidget {
   final Plan plan;
   final FloorPlan? floorPlan;
+  final Site? initialSite;
+  final RuleSettings? initialSettings;
+  final ValueChanged<AnalysisInput>? onAnalysisChanged;
 
   const SiteFormPage({
     super.key,
     required this.plan,
     this.floorPlan,
+    this.initialSite,
+    this.initialSettings,
+    this.onAnalysisChanged,
   });
 
   @override
@@ -43,13 +50,30 @@ class _SiteFormPageState extends State<SiteFormPage> {
   void initState() {
     super.initState();
     final FloorPlan? floorPlan = widget.floorPlan;
-    if (floorPlan != null) {
+    if (widget.initialSite != null) {
+      final site = widget.initialSite!;
+      _siteWidth.text = formatDecimal(site.widthM);
+      _siteLength.text = formatDecimal(site.lengthM);
+      _front.text = formatDecimal(site.frontSetbackM);
+      _left.text = formatDecimal(site.leftSetbackM);
+    } else if (floorPlan != null) {
       final FloorPlanSiteAnalysis analysis =
           FloorPlanSiteAnalysis.fromFloorPlan(floorPlan);
       _siteWidth.text = formatDecimal(analysis.site.widthM);
       _siteLength.text = formatDecimal(analysis.site.lengthM);
       _front.text = formatDecimal(analysis.site.frontSetbackM);
       _left.text = formatDecimal(analysis.site.leftSetbackM);
+    }
+    final settings = widget.initialSettings;
+    if (settings != null) {
+      if (settings.minFrontSetbackM > 0)
+        _minFront.text = formatDecimal(settings.minFrontSetbackM);
+      if (settings.minSideSetbackM > 0)
+        _minSide.text = formatDecimal(settings.minSideSetbackM);
+      if (settings.minRearSetbackM > 0)
+        _minRear.text = formatDecimal(settings.minRearSetbackM);
+      if (settings.maxOccupancyPercent > 0)
+        _maxOccupancy.text = formatDecimal(settings.maxOccupancyPercent);
     }
   }
 
@@ -139,6 +163,9 @@ class _SiteFormPageState extends State<SiteFormPage> {
       minRearSetbackM: parseDecimal(_minRear.text) ?? 0,
       maxOccupancyPercent: parseDecimal(_maxOccupancy.text) ?? 0,
     );
+    widget.onAnalysisChanged?.call(
+      AnalysisInput(site: site, settings: settings),
+    );
 
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -147,6 +174,7 @@ class _SiteFormPageState extends State<SiteFormPage> {
           floorPlan: widget.floorPlan,
           site: site,
           settings: settings,
+          onAnalysisChanged: widget.onAnalysisChanged,
         ),
       ),
     );
@@ -174,8 +202,10 @@ class _SiteFormPageState extends State<SiteFormPage> {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  const Icon(Icons.home_work_outlined,
-                      color: AppColors.primary),
+                  const Icon(
+                    Icons.home_work_outlined,
+                    color: AppColors.primary,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -220,15 +250,19 @@ class _SiteFormPageState extends State<SiteFormPage> {
                     controller: _siteWidth,
                     label: 'Largura',
                     suffix: 'm',
-                    validator:
-                        _numberValidator(optional: false, allowZero: false),
+                    validator: _numberValidator(
+                      optional: false,
+                      allowZero: false,
+                    ),
                   ),
                   _field(
                     controller: _siteLength,
                     label: 'Comprimento',
                     suffix: 'm',
-                    validator:
-                        _numberValidator(optional: false, allowZero: false),
+                    validator: _numberValidator(
+                      optional: false,
+                      allowZero: false,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -253,15 +287,19 @@ class _SiteFormPageState extends State<SiteFormPage> {
                     controller: _front,
                     label: 'Até a frente',
                     suffix: 'm',
-                    validator:
-                        _numberValidator(optional: false, allowZero: true),
+                    validator: _numberValidator(
+                      optional: false,
+                      allowZero: true,
+                    ),
                   ),
                   _field(
                     controller: _left,
                     label: 'Até a esquerda',
                     suffix: 'm',
-                    validator:
-                        _numberValidator(optional: false, allowZero: true),
+                    validator: _numberValidator(
+                      optional: false,
+                      allowZero: true,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -286,15 +324,19 @@ class _SiteFormPageState extends State<SiteFormPage> {
                           controller: _minFront,
                           label: 'Recuo frontal mín.',
                           suffix: 'm',
-                          validator:
-                              _numberValidator(optional: true, allowZero: true),
+                          validator: _numberValidator(
+                            optional: true,
+                            allowZero: true,
+                          ),
                         ),
                         _field(
                           controller: _minSide,
                           label: 'Recuo lateral mín.',
                           suffix: 'm',
-                          validator:
-                              _numberValidator(optional: true, allowZero: true),
+                          validator: _numberValidator(
+                            optional: true,
+                            allowZero: true,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -303,15 +345,20 @@ class _SiteFormPageState extends State<SiteFormPage> {
                           controller: _minRear,
                           label: 'Recuo de fundos mín.',
                           suffix: 'm',
-                          validator:
-                              _numberValidator(optional: true, allowZero: true),
+                          validator: _numberValidator(
+                            optional: true,
+                            allowZero: true,
+                          ),
                         ),
                         _field(
                           controller: _maxOccupancy,
                           label: 'Taxa de ocupação máx.',
                           suffix: '%',
                           validator: _numberValidator(
-                              optional: true, allowZero: true, max: 100),
+                            optional: true,
+                            allowZero: true,
+                            max: 100,
+                          ),
                         ),
                       ),
                     ],
@@ -322,10 +369,7 @@ class _SiteFormPageState extends State<SiteFormPage> {
           ),
           const SizedBox(height: 20),
 
-          FilledButton(
-            onPressed: _onAnalyze,
-            child: const Text('Analisar'),
-          ),
+          FilledButton(onPressed: _onAnalyze, child: const Text('Analisar')),
         ],
       ),
     );

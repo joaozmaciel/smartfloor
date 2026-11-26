@@ -98,6 +98,7 @@ class CapturePreviewPage extends StatelessWidget {
                               initialPlan: FloorPlan(name: input.name),
                               underlayPath: input.path,
                               underlayIsPdf: input.isPdf,
+                              input: input,
                               projectRepository: projectRepository,
                             ),
                           ),

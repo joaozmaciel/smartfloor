@@ -31,14 +31,12 @@ class _CaptureMeasuresPageState extends State<CaptureMeasuresPage> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _widthController = TextEditingController();
   final TextEditingController _lengthController = TextEditingController();
-  final TextEditingController _heightController = TextEditingController();
 
   @override
   void dispose() {
     _nameController.dispose();
     _widthController.dispose();
     _lengthController.dispose();
-    _heightController.dispose();
     super.dispose();
   }
 
@@ -76,10 +74,7 @@ class _CaptureMeasuresPageState extends State<CaptureMeasuresPage> {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => FloorPlanEditorPage(
-          initialPlan: FloorPlan(
-            name: room.name,
-            rooms: [room],
-          ),
+          initialPlan: FloorPlan(name: room.name, rooms: [room]),
           projectRepository: widget.projectRepository,
         ),
       ),
@@ -175,15 +170,6 @@ class _CaptureMeasuresPageState extends State<CaptureMeasuresPage> {
                     decimal: true,
                   ),
                   onChanged: (_) => setState(() {}),
-                  validator: _validateMeasure,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _heightController,
-                  decoration: _decoration('Altura', suffix: 'm'),
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
                   validator: _validateMeasure,
                 ),
               ],

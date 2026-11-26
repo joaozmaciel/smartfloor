@@ -7,8 +7,14 @@ import '../../domain/entities/project.dart';
 class ProjectCard extends StatelessWidget {
   final Project project;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
-  const ProjectCard({super.key, required this.project, required this.onTap});
+  const ProjectCard({
+    super.key,
+    required this.project,
+    required this.onTap,
+    this.onLongPress,
+  });
 
   /// Formata a área em m² ajustando casas decimais e separador (ex: 68,5 m² ou 54 m²).
   String _formatArea(double area) {
@@ -33,6 +39,7 @@ class ProjectCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
+        onLongPress: onLongPress,
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(

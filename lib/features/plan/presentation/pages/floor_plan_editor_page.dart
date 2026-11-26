@@ -1,15 +1,24 @@
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../home/domain/repositories/project_repository.dart';
+import '../../../home/data/repositories/supabase_project_store.dart';
+import '../../../home/domain/entities/project_document.dart';
+import '../../../home/domain/repositories/project_store.dart';
+import '../../../rules/domain/entities/analysis_input.dart';
+import '../../../capture/domain/entities/captured_input.dart';
 import '../../../rules/domain/entities/floor_plan_site_analysis.dart';
 import '../../../rules/presentation/pages/site_form_page.dart';
 import '../../domain/entities/floor_plan.dart';
+import '../../domain/entities/floor_plan_data.dart';
 import '../../domain/entities/plan.dart';
 import '../../domain/entities/point_2d.dart';
 import '../widgets/floor_plan_painter.dart';
+import 'blueprint_preview_page.dart';
 import '../widgets/plan_underlay.dart';
 import '../widgets/plan_viewport.dart';
 
@@ -22,6 +31,11 @@ class FloorPlanEditorPage extends StatefulWidget {
   final String? underlayPath;
   final bool underlayIsPdf;
   final ProjectRepository? projectRepository;
+  final String? projectId;
+  final BackgroundInfo? background;
+  final PlanUnderlay? initialUnderlay;
+  final AnalysisInput? analysis;
+  final CapturedInput? input;
 
   const FloorPlanEditorPage({
     super.key,
@@ -29,6 +43,11 @@ class FloorPlanEditorPage extends StatefulWidget {
     this.underlayPath,
     this.underlayIsPdf = false,
     this.projectRepository,
+    this.projectId,
+    this.background,
+    this.initialUnderlay,
+    this.analysis,
+    this.input,
   });
 
   @override
@@ -59,16 +78,30 @@ class _FloorPlanEditorPageState extends State<FloorPlanEditorPage> {
   Point2D? _measureStart;
   Point2D? _measureEnd;
   bool _isSaving = false;
+  ProjectStore? _projectStore;
+  ProjectStore get _store => _projectStore ??= SupabaseProjectStore();
+  String? _projectId;
+  BackgroundInfo? _background;
+  BackgroundUpload? _pendingBackground;
+  AnalysisInput? _analysis;
 
   @override
   void initState() {
     super.initState();
     _plan = widget.initialPlan;
-    _stage = widget.underlayPath == null
-        ? (_plan.lot == null ? _FloorPlanStage.lot : _FloorPlanStage.rooms)
-        : _FloorPlanStage.calibrate;
-    if (widget.underlayPath case final String path) {
-      _loadUnderlay(path);
+    _projectId = widget.projectId;
+    _background = widget.background;
+    _analysis = widget.analysis;
+    if (widget.initialUnderlay != null) {
+      _underlay = widget.initialUnderlay;
+      _stage = _plan.lot == null ? _FloorPlanStage.lot : _FloorPlanStage.rooms;
+    } else {
+      _stage = widget.underlayPath == null
+          ? (_plan.lot == null ? _FloorPlanStage.lot : _FloorPlanStage.rooms)
+          : _FloorPlanStage.calibrate;
+      if (widget.underlayPath case final String path) {
+        _loadUnderlay(path);
+      }
     }
   }
 
@@ -84,18 +117,38 @@ class _FloorPlanEditorPageState extends State<FloorPlanEditorPage> {
       }
       setState(() {
         _underlay = loaded;
+        final input = widget.input;
+        if (input != null) {
+          _pendingBackground = loaded.sourceBytes == null
+              ? null
+              : BackgroundUpload(
+                  bytes: loaded.sourceBytes!,
+                  contentType: loaded.contentType,
+                );
+          _background = BackgroundInfo(
+            captureMode: input.mode,
+            wasPdf: input.isPdf,
+            fileName: input.name,
+            storagePath: null,
+            originX: loaded.origin.x,
+            originY: loaded.origin.y,
+            metersPerPixel: loaded.metersPerPixel,
+          );
+        }
         _viewport = null;
         _canvasSize = null;
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _stage =
-            _plan.lot == null ? _FloorPlanStage.lot : _FloorPlanStage.rooms;
+        _stage = _plan.lot == null
+            ? _FloorPlanStage.lot
+            : _FloorPlanStage.rooms;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('Não foi possível carregar a referência: $error')),
+          content: Text('Não foi possível carregar a referência: $error'),
+        ),
       );
     }
   }
@@ -224,7 +277,16 @@ class _FloorPlanEditorPageState extends State<FloorPlanEditorPage> {
         image: underlay.image,
         origin: pivot,
         metersPerPixel: distance / imagePixels,
+        sourceBytes: underlay.sourceBytes,
+        contentType: underlay.contentType,
       );
+      if (_background != null) {
+        _background = _background!.copyWith(
+          originX: pivot.x,
+          originY: pivot.y,
+          metersPerPixel: distance / imagePixels,
+        );
+      }
       _calibrationStart = null;
       _calibrationEnd = null;
       _viewport = null;
@@ -445,10 +507,8 @@ class _FloorPlanEditorPageState extends State<FloorPlanEditorPage> {
     final Plan room = _plan.rooms[index];
     final String? name = await showDialog<String>(
       context: context,
-      builder: (_) => _NameDialog(
-        title: 'Renomear cômodo',
-        initialValue: room.name,
-      ),
+      builder: (_) =>
+          _NameDialog(title: 'Renomear cômodo', initialValue: room.name),
     );
     if (!mounted || name == null) return;
     _pushUndo();
@@ -490,9 +550,8 @@ class _FloorPlanEditorPageState extends State<FloorPlanEditorPage> {
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _openAnalysis() async {
@@ -504,36 +563,87 @@ class _FloorPlanEditorPageState extends State<FloorPlanEditorPage> {
       _showMessage('Desenhe o terreno antes de analisar.');
       return;
     }
-    final FloorPlanSiteAnalysis analysis =
-        FloorPlanSiteAnalysis.fromFloorPlan(_plan);
+    final FloorPlanSiteAnalysis analysis = FloorPlanSiteAnalysis.fromFloorPlan(
+      _plan,
+    );
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => SiteFormPage(
           plan: analysis.building,
           floorPlan: _plan,
+          initialSite: _analysis?.site ?? analysis.site,
+          initialSettings: _analysis?.settings,
+          onAnalysisChanged: _onAnalysisChanged,
         ),
       ),
     );
   }
 
+  void _onAnalysisChanged(AnalysisInput analysis) {
+    setState(() => _analysis = analysis);
+    final id = _projectId;
+    if (id != null) _store.saveAnalysis(id, analysis).catchError((_) {});
+  }
+
+  BackgroundInfo? _backgroundForSave() {
+    final underlay = _underlay;
+    final background = _background;
+    if (underlay == null || background == null) return background;
+    return background.copyWith(
+      originX: underlay.origin.x,
+      originY: underlay.origin.y,
+      metersPerPixel: underlay.metersPerPixel,
+    );
+  }
+
   Future<void> _saveProject() async {
-    final ProjectRepository? repository = widget.projectRepository;
-    if (repository == null || _isSaving || _plan.rooms.isEmpty) return;
+    if (_isSaving || _plan.rooms.isEmpty) return;
+    FloorPlan plan = _plan;
+    if (_projectId == null) {
+      final String? name = await showDialog<String>(
+        context: context,
+        builder: (_) =>
+            _NameDialog(title: 'Salvar projeto', initialValue: _plan.name),
+      );
+      if (!mounted || name == null) return;
+      if (name.length > 120) {
+        _showMessage('O nome pode ter no máximo 120 caracteres.');
+        return;
+      }
+      plan = _plan.withName(name);
+    }
     setState(() => _isSaving = true);
     try {
-      final project = await repository.createProject(
-        name: _plan.name,
-        areaM2: _plan.builtAreaM2,
+      final saved = await _store.save(
+        projectId: _projectId,
+        floorPlan: plan,
+        background: _backgroundForSave(),
+        pendingBackground: _pendingBackground,
+        analysis: _analysis,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${project.name} foi salvo nos seus projetos.')),
+      setState(() {
+        _projectId = saved.id;
+        _plan = plan;
+        _background = saved.document.background;
+        _isSaving = false;
+        if (!saved.backgroundUploadFailed) _pendingBackground = null;
+      });
+      _showMessage(
+        saved.backgroundUploadFailed
+            ? 'Projeto salvo, mas a imagem não foi enviada. Toque em salvar para tentar novamente.'
+            : 'Projeto salvo!',
       );
-      Navigator.of(context).popUntil((route) => route.isFirst);
-    } catch (error) {
+    } on PostgrestException {
       if (!mounted) return;
       setState(() => _isSaving = false);
-      _showMessage('Não foi possível salvar o projeto: $error');
+      _showMessage(
+        'Não foi possível salvar. Verifique sua conexão e tente novamente.',
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      _showMessage('Não foi possível salvar o projeto.');
     }
   }
 
@@ -575,11 +685,16 @@ class _FloorPlanEditorPageState extends State<FloorPlanEditorPage> {
         title: Text(_plan.name),
         actions: [
           IconButton(
+            tooltip: 'Ver desenho técnico',
+            onPressed: _plan.hasRooms ? _openBlueprint : null,
+            icon: const Icon(Icons.architecture_outlined),
+          ),
+          IconButton(
             tooltip: 'Desfazer',
             onPressed: _undoStack.isEmpty ? null : _undo,
             icon: const Icon(Icons.undo),
           ),
-          if (widget.projectRepository != null)
+          if (widget.projectRepository != null || _projectId != null)
             IconButton(
               tooltip: 'Salvar projeto',
               onPressed: _isSaving ? null : _saveProject,
@@ -637,22 +752,37 @@ class _FloorPlanEditorPageState extends State<FloorPlanEditorPage> {
     );
   }
 
+  void _openBlueprint() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => BlueprintPreviewPage(
+          data: FloorPlanData(plan: _plan.withLot(null)),
+          title: _plan.name,
+        ),
+      ),
+    );
+  }
+
   Widget _buildInstruction() {
     final String instruction = switch (_stage) {
       _FloorPlanStage.calibrate => 'Toque em dois pontos conhecidos da planta.',
-      _FloorPlanStage.lot => _draft.isEmpty
-          ? 'Toque nos cantos do terreno; toque no primeiro para fechar.'
-          : 'Continue marcando o terreno e toque no primeiro ponto para fechar.',
-      _FloorPlanStage.rooms => _draft.isNotEmpty
-          ? 'Marque os cantos do cômodo e toque no primeiro para fechar.'
-          : 'Selecione um cômodo ou comece a desenhar outro.',
+      _FloorPlanStage.lot =>
+        _draft.isEmpty
+            ? 'Toque nos cantos do terreno; toque no primeiro para fechar.'
+            : 'Continue marcando o terreno e toque no primeiro ponto para fechar.',
+      _FloorPlanStage.rooms =>
+        _draft.isNotEmpty
+            ? 'Marque os cantos do cômodo e toque no primeiro para fechar.'
+            : 'Selecione um cômodo ou comece a desenhar outro.',
     };
     return Container(
       width: double.infinity,
       color: AppColors.highlight,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Text(instruction,
-          style: const TextStyle(fontWeight: FontWeight.w600)),
+      child: Text(
+        instruction,
+        style: const TextStyle(fontWeight: FontWeight.w600),
+      ),
     );
   }
 
@@ -744,8 +874,8 @@ class _FloorPlanEditorPageState extends State<FloorPlanEditorPage> {
                       label: 'Editar parede',
                       onPressed: _selectedWall == null
                           ? () => _showMessage(
-                                'Toque em uma parede para selecioná-la.',
-                              )
+                              'Toque em uma parede para selecioná-la.',
+                            )
                           : _editSelectedWall,
                     ),
                     _buildToolButton(
@@ -753,9 +883,9 @@ class _FloorPlanEditorPageState extends State<FloorPlanEditorPage> {
                       label: 'Adicionar canto',
                       onPressed: _selectedWall == null
                           ? () => _showMessage(
-                                'Toque em uma parede para selecionar onde '
-                                'adicionar o canto.',
-                              )
+                              'Toque em uma parede para selecionar onde '
+                              'adicionar o canto.',
+                            )
                           : _insertSelectedCorner,
                     ),
                     _buildToolButton(
@@ -763,8 +893,8 @@ class _FloorPlanEditorPageState extends State<FloorPlanEditorPage> {
                       label: 'Remover canto',
                       onPressed: _selectedVertex == null
                           ? () => _showMessage(
-                                'Toque em um canto para selecioná-lo.',
-                              )
+                              'Toque em um canto para selecioná-lo.',
+                            )
                           : _removeSelectedCorner,
                     ),
                   ],
@@ -814,8 +944,9 @@ class _NameDialog extends StatefulWidget {
 }
 
 class _NameDialogState extends State<_NameDialog> {
-  late final TextEditingController _controller =
-      TextEditingController(text: widget.initialValue);
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initialValue,
+  );
 
   @override
   void dispose() {
@@ -832,6 +963,7 @@ class _NameDialogState extends State<_NameDialog> {
         autofocus: true,
         textCapitalization: TextCapitalization.sentences,
         decoration: const InputDecoration(labelText: 'Nome'),
+        maxLength: 120,
       ),
       actions: [
         TextButton(
@@ -869,8 +1001,9 @@ class _NumberDialog extends StatefulWidget {
 
 class _NumberDialogState extends State<_NumberDialog> {
   late final TextEditingController _controller = TextEditingController(
-    text:
-        widget.initialValue == null ? '' : formatDecimal(widget.initialValue!),
+    text: widget.initialValue == null
+        ? ''
+        : formatDecimal(widget.initialValue!),
   );
   String? _error;
 

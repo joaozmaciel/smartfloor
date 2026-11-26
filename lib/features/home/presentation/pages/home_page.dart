@@ -8,6 +8,11 @@ import '../widgets/capture_shortcut_card.dart';
 import '../widgets/greeting_card.dart';
 import '../widgets/project_card.dart';
 import '../../../capture/presentation/pages/capture_page.dart';
+import '../../data/repositories/supabase_project_store.dart';
+import '../../domain/repositories/project_store.dart';
+import '../project_opener.dart';
+import '../../../settings/presentation/controllers/settings_controller.dart';
+import '../../../settings/presentation/pages/settings_page.dart';
 
 /// Tela inicial do SmartFloor.
 ///
@@ -16,13 +21,16 @@ class HomePage extends StatefulWidget {
   final ProjectRepository repository;
   final String userName;
   final String userEmail;
+  final ProjectStore? store;
 
   HomePage({
     super.key,
     ProjectRepository? repository,
     this.userName = '',
     this.userEmail = '',
-  }) : repository = repository ?? MockProjectRepository();
+    ProjectStore? store,
+  }) : repository = repository ?? MockProjectRepository(),
+       store = store;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -34,11 +42,19 @@ class _HomePageState extends State<HomePage> {
   List<Project> _projects = [];
   bool _isLoadingProjects = true;
   Object? _projectsError;
+  late final SettingsController _settingsController = SettingsController();
+  ProjectStore get _store => widget.store ?? SupabaseProjectStore();
 
   @override
   void initState() {
     super.initState();
     _loadProjects(showLoading: false);
+  }
+
+  @override
+  void dispose() {
+    _settingsController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadProjects({bool showLoading = true}) async {
@@ -68,9 +84,8 @@ class _HomePageState extends State<HomePage> {
 
   /// Mostra uma mensagem temporária na parte de baixo da tela.
   void _showComingSoon(String feature) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$feature: em breve!')),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('$feature: em breve!')));
   }
 
   /// Abre a tela de captura por cima da Home.
@@ -83,6 +98,61 @@ class _HomePageState extends State<HomePage> {
       ),
     );
     if (mounted) await _loadProjects();
+  }
+
+  Future<void> _openSavedProject(Project project) async {
+    await openProject(context, project.id, store: _store);
+    if (mounted) await _loadProjects();
+  }
+
+  Future<void> _openSettings() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => SettingsPage(
+          controller: _settingsController,
+          onAdd: _openCapture,
+          onPrivacyTap: () => _showComingSoon('Privacidade e permissões'),
+          onHelpTap: () => _showComingSoon('Ajuda e suporte'),
+          onAboutTap: () => _showComingSoon('Sobre o aplicativo'),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteProject(Project project) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Excluir projeto?'),
+        content: Text(
+          'O projeto "${project.name}" e sua imagem serão removidos.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await _store.delete(project.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Projeto excluído.')));
+        await _loadProjects();
+      }
+    } catch (_) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível excluir o projeto.')),
+        );
+    }
   }
 
   @override
@@ -170,9 +240,7 @@ class _HomePageState extends State<HomePage> {
       children: [
         GreetingCard(userName: widget.userName),
         const SizedBox(height: 12),
-        CaptureShortcutCard(
-          onTap: _openCapture,
-        ),
+        CaptureShortcutCard(onTap: _openCapture),
         const SizedBox(height: 24),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -206,7 +274,8 @@ class _HomePageState extends State<HomePage> {
           for (final project in _projects) ...[
             ProjectCard(
               project: project,
-              onTap: () => _showComingSoon(project.name),
+              onTap: () => _openSavedProject(project),
+              onLongPress: () => _deleteProject(project),
             ),
             const SizedBox(height: 12),
           ],
@@ -216,24 +285,22 @@ class _HomePageState extends State<HomePage> {
 
   /// Aba 1: Lista completa de projetos.
   Widget _buildProjectsTab(TextTheme textTheme) {
-    final double totalArea =
-        _projects.fold(0, (sum, project) => sum + project.areaM2);
+    final double totalArea = _projects.fold(
+      0,
+      (sum, project) => sum + project.areaM2,
+    );
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
       children: [
         Text(
           'Todos os Projetos',
-          style: textTheme.headlineSmall?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
+          style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 4),
         Text(
           '${_projects.length} projeto(s) salvo(s) • Total de ${totalArea.toStringAsFixed(1).replaceAll('.', ',')} m²',
-          style: textTheme.bodyMedium?.copyWith(
-            color: AppColors.textSecondary,
-          ),
+          style: textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
         ),
         const SizedBox(height: 16),
         if (_isLoadingProjects)
@@ -254,7 +321,8 @@ class _HomePageState extends State<HomePage> {
           for (final project in _projects) ...[
             ProjectCard(
               project: project,
-              onTap: () => _showComingSoon(project.name),
+              onTap: () => _openSavedProject(project),
+              onLongPress: () => _deleteProject(project),
             ),
             const SizedBox(height: 12),
           ],
@@ -323,10 +391,7 @@ class _HomePageState extends State<HomePage> {
             CircleAvatar(
               radius: 24,
               backgroundColor: AppColors.highlight,
-              child: const Icon(
-                Icons.person,
-                color: AppColors.primary,
-              ),
+              child: const Icon(Icons.person, color: AppColors.primary),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -420,7 +485,7 @@ class _HomePageState extends State<HomePage> {
                 icon: Icons.settings_outlined,
                 title: 'Configurações',
                 subtitle: 'Ajuste unidades e captura',
-                onTap: () => setState(() => _selectedIndex = 3),
+                onTap: _openSettings,
               ),
             ),
           ],
@@ -461,9 +526,7 @@ class _HomePageState extends State<HomePage> {
   }) {
     return Material(
       color: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(18),
@@ -514,9 +577,7 @@ class _HomePageState extends State<HomePage> {
   }) {
     return Material(
       color: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(18),
@@ -561,9 +622,7 @@ class _HomePageState extends State<HomePage> {
       children: [
         Text(
           'Mais opções',
-          style: textTheme.headlineSmall?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
+          style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 16),
         Card(
@@ -573,7 +632,7 @@ class _HomePageState extends State<HomePage> {
                 leading: const Icon(Icons.settings_outlined),
                 title: const Text('Configurações do aplicativo'),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => _showComingSoon('Configurações'),
+                onTap: _openSettings,
               ),
               const Divider(height: 1),
               ListTile(
