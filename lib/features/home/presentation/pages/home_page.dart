@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../assistant/presentation/pages/planning_assistant_page.dart';
 import '../../data/repositories/mock_project_repository.dart';
 import '../../domain/entities/project.dart';
 import '../../domain/repositories/project_repository.dart';
@@ -85,6 +86,14 @@ class _HomePageState extends State<HomePage> {
     if (mounted) await _loadProjects();
   }
 
+  Future<void> _openAssistant() {
+    return Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => PlanningAssistantPage(projects: _projects),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
@@ -105,6 +114,11 @@ class _HomePageState extends State<HomePage> {
                 ],
               ),
               actions: [
+                IconButton(
+                  tooltip: 'Assistente de planejamento',
+                  icon: const Icon(Icons.auto_awesome_outlined),
+                  onPressed: _openAssistant,
+                ),
                 IconButton(
                   icon: const Icon(Icons.menu),
                   onPressed: () => _showComingSoon('Menu'),

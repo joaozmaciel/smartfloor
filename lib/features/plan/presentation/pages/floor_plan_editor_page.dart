@@ -22,6 +22,7 @@ class FloorPlanEditorPage extends StatefulWidget {
   final String? underlayPath;
   final bool underlayIsPdf;
   final ProjectRepository? projectRepository;
+  final double? roomHeightM;
 
   const FloorPlanEditorPage({
     super.key,
@@ -29,6 +30,7 @@ class FloorPlanEditorPage extends StatefulWidget {
     this.underlayPath,
     this.underlayIsPdf = false,
     this.projectRepository,
+    this.roomHeightM,
   });
 
   @override
@@ -521,9 +523,13 @@ class _FloorPlanEditorPageState extends State<FloorPlanEditorPage> {
     if (repository == null || _isSaving || _plan.rooms.isEmpty) return;
     setState(() => _isSaving = true);
     try {
+      final Plan? bounds = _plan.buildingBoundingBox();
       final project = await repository.createProject(
         name: _plan.name,
         areaM2: _plan.builtAreaM2,
+        widthM: bounds?.boundingWidthM,
+        lengthM: bounds?.boundingHeightM,
+        heightM: widget.roomHeightM,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

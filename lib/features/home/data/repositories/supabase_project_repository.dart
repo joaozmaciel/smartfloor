@@ -21,7 +21,9 @@ class SupabaseProjectRepository implements ProjectRepository {
   Future<List<Project>> getProjects() async {
     final rows = await _client
         .from('projects')
-        .select('id, name, area_m2, created_at')
+        .select(
+          'id, name, area_m2, width_m, length_m, height_m, created_at',
+        )
         .eq('user_id', _userId)
         .order('created_at', ascending: false);
 
@@ -32,6 +34,9 @@ class SupabaseProjectRepository implements ProjectRepository {
   Future<Project> createProject({
     required String name,
     required double areaM2,
+    double? widthM,
+    double? lengthM,
+    double? heightM,
   }) async {
     final row = await _client
         .from('projects')
@@ -39,8 +44,13 @@ class SupabaseProjectRepository implements ProjectRepository {
           'user_id': _userId,
           'name': name,
           'area_m2': areaM2,
+          'width_m': widthM,
+          'length_m': lengthM,
+          'height_m': heightM,
         })
-        .select('id, name, area_m2, created_at')
+        .select(
+          'id, name, area_m2, width_m, length_m, height_m, created_at',
+        )
         .single();
 
     return Project.fromJson(row);

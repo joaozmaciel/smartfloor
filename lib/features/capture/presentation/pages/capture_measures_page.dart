@@ -4,22 +4,27 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../domain/entities/ar_room_measurements.dart';
+import '../../data/ar_measurement_controller.dart';
 import '../../../home/domain/repositories/project_repository.dart';
 import '../../../plan/domain/entities/floor_plan.dart';
 import '../../../plan/domain/entities/plan.dart';
 import '../../../plan/presentation/pages/floor_plan_editor_page.dart';
 import '../../domain/entities/captured_input.dart';
 import '../widgets/capture_step_indicator.dart';
+import 'guided_ar_scan_page.dart';
 
 /// Etapa 3 do fluxo: o usuário informa as medidas do ambiente.
 class CaptureMeasuresPage extends StatefulWidget {
   final CapturedInput input;
   final ProjectRepository? projectRepository;
+  final ArMeasurementController? arMeasurementController;
 
   const CaptureMeasuresPage({
     super.key,
     required this.input,
     this.projectRepository,
+    this.arMeasurementController,
   });
 
   @override
@@ -64,6 +69,29 @@ class _CaptureMeasuresPageState extends State<CaptureMeasuresPage> {
     return width * length;
   }
 
+  Future<void> _scanWithAr() async {
+    final measurements = await Navigator.of(context)
+        .push<ArRoomMeasurements>(
+      MaterialPageRoute(
+        builder: (_) => GuidedArScanPage(
+          controller: widget.arMeasurementController,
+        ),
+      ),
+    );
+    if (!mounted || measurements == null) return;
+
+    setState(() {
+      _widthController.text = formatDecimal(measurements.widthM);
+      _lengthController.text = formatDecimal(measurements.lengthM);
+      _heightController.text = formatDecimal(measurements.heightM);
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Medidas estimadas preenchidas. Você pode ajustá-las.'),
+      ),
+    );
+  }
+
   void _onContinue() {
     if (!_formKey.currentState!.validate()) return;
 
@@ -80,6 +108,7 @@ class _CaptureMeasuresPageState extends State<CaptureMeasuresPage> {
             name: room.name,
             rooms: [room],
           ),
+          roomHeightM: _parse(_heightController.text),
           projectRepository: widget.projectRepository,
         ),
       ),
@@ -137,6 +166,12 @@ class _CaptureMeasuresPageState extends State<CaptureMeasuresPage> {
             ),
           ),
           const SizedBox(height: 16),
+          OutlinedButton.icon(
+            onPressed: _scanWithAr,
+            icon: const Icon(Icons.view_in_ar_outlined),
+            label: const Text('Preencher com escaneamento AR'),
+          ),
+          const SizedBox(height: 12),
           _buildReferenceCard(textTheme),
           const SizedBox(height: 16),
           Form(

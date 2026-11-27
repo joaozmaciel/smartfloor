@@ -14,6 +14,9 @@ class MockProjectRepository implements ProjectRepository {
   Future<Project> createProject({
     required String name,
     required double areaM2,
+    double? widthM,
+    double? lengthM,
+    double? heightM,
   }) async {
     final now = DateTime.now();
     final project = Project(
@@ -21,6 +24,9 @@ class MockProjectRepository implements ProjectRepository {
       name: name,
       areaM2: areaM2,
       createdAt: now,
+      widthM: widthM,
+      lengthM: lengthM,
+      heightM: heightM,
     );
     _projects.insert(0, project);
     return project;

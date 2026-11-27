@@ -8,5 +8,8 @@ abstract class ProjectRepository {
   Future<Project> createProject({
     required String name,
     required double areaM2,
+    double? widthM,
+    double? lengthM,
+    double? heightM,
   });
 }

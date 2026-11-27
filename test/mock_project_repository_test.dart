@@ -10,8 +10,14 @@ void main() {
     final project = await repository.createProject(
       name: 'Sala de estar',
       areaM2: 18,
+      widthM: 4,
+      lengthM: 4.5,
+      heightM: 2.8,
     );
 
     expect(await repository.getProjects(), [project]);
+    expect(project.widthM, 4);
+    expect(project.lengthM, 4.5);
+    expect(project.heightM, 2.8);
   });
 }
