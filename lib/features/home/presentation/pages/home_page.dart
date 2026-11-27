@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'dart:typed_data';
+
 import '../../../../core/theme/app_colors.dart';
 import '../../data/repositories/mock_project_repository.dart';
 import '../../domain/entities/project.dart';
@@ -21,6 +23,7 @@ class HomePage extends StatefulWidget {
   final ProjectRepository repository;
   final String userName;
   final String userEmail;
+  final String? userPhotoUrl;
   final ProjectStore? store;
 
   HomePage({
@@ -28,6 +31,7 @@ class HomePage extends StatefulWidget {
     ProjectRepository? repository,
     this.userName = '',
     this.userEmail = '',
+    this.userPhotoUrl,
     ProjectStore? store,
   }) : repository = repository ?? MockProjectRepository(),
        store = store;
@@ -42,8 +46,39 @@ class _HomePageState extends State<HomePage> {
   List<Project> _projects = [];
   bool _isLoadingProjects = true;
   Object? _projectsError;
+  final Map<String, Future<Uint8List?>> _projectThumbnails = {};
   late final SettingsController _settingsController = SettingsController();
   ProjectStore get _store => widget.store ?? SupabaseProjectStore();
+
+  Future<Uint8List?>? _thumbnailFor(Project project) {
+    final path = project.backgroundPath;
+    if (path == null || path.isEmpty) return null;
+    return _projectThumbnails.putIfAbsent(project.id, () async {
+      try {
+        return await _store.downloadBackground(path);
+      } catch (_) {
+        return null;
+      }
+    });
+  }
+
+  ImageProvider? get userPhotoImage {
+    final url = widget.userPhotoUrl;
+    return url == null || url.trim().isEmpty ? null : NetworkImage(url);
+  }
+
+  String get _profileInitials {
+    final parts = widget.userName
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return 'U';
+    return parts
+        .take(2)
+        .map((part) => part.characters.first.toUpperCase())
+        .join();
+  }
 
   @override
   void initState() {
@@ -177,20 +212,24 @@ class _HomePageState extends State<HomePage> {
               actions: [
                 IconButton(
                   icon: const Icon(Icons.menu),
-                  onPressed: () => _showComingSoon('Menu'),
+                  onPressed: _openSettings,
                 ),
               ],
             ),
 
       // ---------- Conteúdo (IndexedStack mantém o estado de cada aba) ----------
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: [
-          _buildHomeTab(textTheme),
-          _buildProjectsTab(textTheme),
-          _buildProfileTab(textTheme),
-          _buildMoreTab(textTheme),
-        ],
+      body: SafeArea(
+        top: _selectedIndex == 2,
+        bottom: false,
+        child: IndexedStack(
+          index: _selectedIndex,
+          children: [
+            _buildHomeTab(textTheme),
+            _buildProjectsTab(textTheme),
+            _buildProfileTab(textTheme),
+            _buildMoreTab(textTheme),
+          ],
+        ),
       ),
 
       // ---------- Botão flutuante ----------
@@ -274,6 +313,7 @@ class _HomePageState extends State<HomePage> {
           for (final project in _projects) ...[
             ProjectCard(
               project: project,
+              thumbnail: _thumbnailFor(project),
               onTap: () => _openSavedProject(project),
               onLongPress: () => _deleteProject(project),
             ),
@@ -321,6 +361,7 @@ class _HomePageState extends State<HomePage> {
           for (final project in _projects) ...[
             ProjectCard(
               project: project,
+              thumbnail: _thumbnailFor(project),
               onTap: () => _openSavedProject(project),
               onLongPress: () => _deleteProject(project),
             ),
@@ -383,140 +424,168 @@ class _HomePageState extends State<HomePage> {
 
   /// Aba 2: Perfil do usuário.
   Widget _buildProfileTab(TextTheme textTheme) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-      children: [
-        Row(
-          children: [
-            CircleAvatar(
-              radius: 24,
-              backgroundColor: AppColors.highlight,
-              child: const Icon(Icons.person, color: AppColors.primary),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.userName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  Text(
-                    widget.userEmail,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: textTheme.bodySmall?.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  Text(
-                    'Resumo do perfil',
-                    style: textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const Spacer(),
-                  SizedBox(
-                    width: 30,
-                    height: 30,
-                    child: FilledButton(
-                      onPressed: () => _showComingSoon('Resumo do perfil'),
-                      style: FilledButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        backgroundColor: AppColors.primary,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(9),
+              GestureDetector(
+                onTap: () => _showComingSoon('Editar foto do perfil'),
+                child: CircleAvatar(
+                  radius: 36,
+                  backgroundColor: AppColors.highlight,
+                  child: userPhotoImage == null
+                      ? _profileAvatarFallback
+                      : ClipOval(
+                          child: Image.network(
+                            widget.userPhotoUrl!,
+                            width: 72,
+                            height: 72,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) =>
+                                _profileAvatarFallback,
+                          ),
                         ),
-                      ),
-                      child: const Icon(Icons.add, size: 22),
-                    ),
-                  ),
-                ],
+                ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Acesse suas configurações, ambientes e preferências '
-                'em um só lugar.',
-                style: textTheme.bodySmall?.copyWith(
-                  fontSize: 11,
-                  height: 1.3,
-                  color: AppColors.textSecondary,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.userName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      widget.userEmail,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.bodySmall?.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: _profileShortcut(
-                icon: Icons.folder_open_outlined,
-                title: 'Projetos',
-                subtitle: 'Acesse ambientes e plantas',
-                onTap: () => setState(() => _selectedIndex = 1),
-              ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _profileShortcut(
-                icon: Icons.settings_outlined,
-                title: 'Configurações',
-                subtitle: 'Ajuste unidades e captura',
-                onTap: _openSettings,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'Resumo do perfil',
+                      style: textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const Spacer(),
+                    SizedBox(
+                      width: 46,
+                      height: 46,
+                      child: FilledButton(
+                        onPressed: () => _showComingSoon('Resumo do perfil'),
+                        style: FilledButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          backgroundColor: AppColors.primary,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: const Icon(Icons.add, size: 22),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Acesse suas configurações, ambientes e preferências '
+                  'em um só lugar.',
+                  style: textTheme.bodySmall?.copyWith(
+                    fontSize: 13,
+                    height: 1.3,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        _profileLink(
-          title: 'Preferências',
-          subtitle: 'Unidades, qualidade e notificações',
-          onTap: () => _showComingSoon('Preferências'),
-        ),
-        const SizedBox(height: 8),
-        _profileLink(
-          title: 'Ambientes',
-          subtitle: 'Gerencie plantas e capturas',
-          onTap: () => setState(() => _selectedIndex = 1),
-        ),
-        const SizedBox(height: 8),
-        _profileLink(
-          title: 'Ajuda',
-          subtitle: 'Central de ajuda e suporte',
-          onTap: () => _showComingSoon('Ajuda e suporte'),
-        ),
-        const SizedBox(height: 8),
-        _profileLink(
-          title: 'Sobre o aplicativo',
-          subtitle: 'Versão 1.0.0 • Políticas',
-          onTap: () => _showComingSoon('Sobre o aplicativo'),
-        ),
-      ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _profileShortcut(
+                  icon: Icons.folder_open_outlined,
+                  title: 'Projetos',
+                  subtitle: 'Acesse ambientes e plantas',
+                  onTap: () => setState(() => _selectedIndex = 1),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _profileShortcut(
+                  icon: Icons.settings_outlined,
+                  title: 'Configurações',
+                  subtitle: 'Ajuste unidades e captura',
+                  onTap: _openSettings,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _profileLink(
+            title: 'Preferências',
+            subtitle: 'Unidades, qualidade e notificações',
+            onTap: () => _showComingSoon('Preferências'),
+          ),
+          const SizedBox(height: 8),
+          _profileLink(
+            title: 'Ambientes',
+            subtitle: 'Gerencie plantas e capturas',
+            onTap: () => setState(() => _selectedIndex = 1),
+          ),
+          const SizedBox(height: 8),
+          _profileLink(
+            title: 'Ajuda',
+            subtitle: 'Central de ajuda e suporte',
+            onTap: () => _showComingSoon('Ajuda e suporte'),
+          ),
+          const SizedBox(height: 8),
+          _profileLink(
+            title: 'Sobre o aplicativo',
+            subtitle: 'Versão 1.0.0 • Políticas',
+            onTap: () => _showComingSoon('Sobre o aplicativo'),
+          ),
+        ],
+      ),
     );
   }
+
+  Widget get _profileAvatarFallback => Center(
+    child: Text(
+      _profileInitials,
+      style: const TextStyle(
+        fontSize: 22,
+        fontWeight: FontWeight.w600,
+        color: AppColors.primary,
+      ),
+    ),
+  );
 
   Widget _profileShortcut({
     required IconData icon,
@@ -531,36 +600,41 @@ class _HomePageState extends State<HomePage> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(18),
         child: SizedBox(
-          height: 88,
+          height: 132,
           child: Padding(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  width: 26,
-                  height: 26,
+                  width: 40,
+                  height: 40,
                   decoration: const BoxDecoration(
                     color: AppColors.background,
                     shape: BoxShape.circle,
                   ),
                   child: Icon(icon, size: 15, color: AppColors.primary),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 8),
                 Text(
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 12,
+                    fontSize: 14,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+                const SizedBox(height: 4),
                 Text(
                   subtitle,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 10, height: 1.2),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    height: 1.25,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ],
             ),
