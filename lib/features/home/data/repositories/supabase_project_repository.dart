@@ -5,25 +5,16 @@ import '../../domain/repositories/project_repository.dart';
 
 class SupabaseProjectRepository implements ProjectRepository {
   SupabaseProjectRepository({SupabaseClient? client})
-      : _client = client ?? Supabase.instance.client;
+    : _client = client ?? Supabase.instance.client;
 
   final SupabaseClient _client;
-
-  String get _userId {
-    final user = _client.auth.currentUser;
-    if (user == null) {
-      throw StateError('É necessário entrar para acessar seus projetos.');
-    }
-    return user.id;
-  }
 
   @override
   Future<List<Project>> getProjects() async {
     final rows = await _client
         .from('projects')
-        .select('id, name, area_m2, created_at')
-        .eq('user_id', _userId)
-        .order('created_at', ascending: false);
+        .select('id, name, area_m2, created_at, background_path')
+        .order('updated_at', ascending: false);
 
     return rows.map(Project.fromJson).toList();
   }
@@ -35,14 +26,9 @@ class SupabaseProjectRepository implements ProjectRepository {
   }) async {
     final row = await _client
         .from('projects')
-        .insert({
-          'user_id': _userId,
-          'name': name,
-          'area_m2': areaM2,
-        })
-        .select('id, name, area_m2, created_at')
+        .insert({'name': name, 'area_m2': areaM2})
+        .select('id, name, area_m2, created_at, background_path')
         .single();
-
     return Project.fromJson(row);
   }
 }

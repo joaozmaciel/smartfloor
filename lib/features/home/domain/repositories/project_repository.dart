@@ -5,8 +5,5 @@ import '../entities/project.dart';
 abstract class ProjectRepository {
   Future<List<Project>> getProjects();
 
-  Future<Project> createProject({
-    required String name,
-    required double areaM2,
-  });
+  Future<Project> createProject({required String name, required double areaM2});
 }

@@ -112,8 +112,14 @@ class _RegisterPageState extends State<RegisterPage> {
       }
     } catch (error) {
       if (mounted) {
+        final detail = error.toString().toLowerCase();
+        final message = detail.contains('failed host lookup') ||
+                detail.contains('socketexception') ||
+                detail.contains('clientexception')
+            ? 'Sem conexão com a internet. Conecte o tablet ao Wi-Fi ou ative os dados móveis e tente novamente.'
+            : 'Não foi possível criar a conta. Tente novamente.';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Não foi possível criar a conta: $error')),
+          SnackBar(content: Text(message)),
         );
       }
     } finally {

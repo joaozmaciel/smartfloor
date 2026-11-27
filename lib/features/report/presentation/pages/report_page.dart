@@ -6,9 +6,11 @@ import 'package:printing/printing.dart';
 
 import '../../../../core/utils/painter_image.dart';
 import '../../../plan/domain/entities/floor_plan.dart';
+import '../../../plan/domain/entities/floor_plan_data.dart';
 import '../../../plan/domain/entities/plan.dart';
 import '../../../plan/domain/entities/point_2d.dart';
-import '../../../plan/presentation/widgets/floor_plan_painter.dart';
+import '../../../plan/presentation/widgets/blueprint_painter.dart';
+import '../../../plan/presentation/widgets/blueprint_scene.dart';
 import '../../../plan/presentation/widgets/plan_painter.dart';
 import '../../../plan/presentation/widgets/plan_viewport.dart';
 import '../../../rules/domain/entities/rule_settings.dart';
@@ -63,14 +65,16 @@ class _ReportPageState extends State<ReportPage> {
       );
     }
     final Uint8List planImage = await paintToPng(
-      floorPlan == null
+      floorPlan == null || !floorPlan.hasRooms
           ? PlanPainter(
-              plan: widget.plan, viewport: viewport, showHandles: false)
-          : FloorPlanPainter(
-              plan: floorPlan,
+              plan: widget.plan,
               viewport: viewport,
               showHandles: false,
-              showAllDimensions: true,
+            )
+          : BlueprintPainter(
+              scene: BlueprintScene.build(
+                FloorPlanData(plan: floorPlan.withLot(null)),
+              ),
             ),
       drawingSize,
       pixelRatio: 2,

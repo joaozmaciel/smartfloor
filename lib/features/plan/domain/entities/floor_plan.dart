@@ -20,6 +20,9 @@ class FloorPlan {
 
   const FloorPlan({required this.name, this.lot, this.rooms = const []});
 
+  FloorPlan withName(String newName) =>
+      FloorPlan(name: newName, lot: lot, rooms: rooms);
+
   FloorPlan withLot(Plan? newLot) =>
       FloorPlan(name: name, lot: newLot, rooms: rooms);
 
@@ -78,15 +81,14 @@ class FloorPlan {
     return moveVertices(roomVerticesAt(oldEnd), changed.vertices[endIndex]);
   }
 
-  double get builtAreaM2 =>
-      rooms.fold(0.0, (sum, room) => sum + room.areaM2);
+  double get builtAreaM2 => rooms.fold(0.0, (sum, room) => sum + room.areaM2);
 
   bool get hasRooms => rooms.isNotEmpty;
 
   List<Point2D> get allVertices => [
-        ...?lot?.vertices,
-        for (final Plan room in rooms) ...room.vertices,
-      ];
+    ...?lot?.vertices,
+    for (final Plan room in rooms) ...room.vertices,
+  ];
 
   Plan? buildingBoundingBox() {
     if (rooms.isEmpty) return null;

@@ -8,12 +8,8 @@ import 'features/home/data/repositories/supabase_project_repository.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Supabase.initialize(
-    url: supabaseUrl,
-    anonKey: supabasePublishableKey,
-  );
+  ensureConfigured();
+  await Supabase.initialize(url: supabaseUrl, anonKey: supabasePublishableKey);
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-  runApp(
-    SmartFloorApp(projectRepository: SupabaseProjectRepository()),
-  );
+  runApp(SmartFloorApp(projectRepository: SupabaseProjectRepository()));
 }

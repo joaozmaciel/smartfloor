@@ -20,7 +20,6 @@ void main() {
     await tester.enterText(find.byType(TextFormField).at(0), 'Meio ambiente');
     await tester.enterText(find.byType(TextFormField).at(1), '3,5');
     await tester.enterText(find.byType(TextFormField).at(2), '2');
-    await tester.enterText(find.byType(TextFormField).at(3), '2,8');
     await tester.pump();
 
     await tester.scrollUntilVisible(
@@ -64,12 +63,11 @@ void main() {
     await tester.tap(find.text('Continuar'));
     await tester.pump();
 
-    expect(find.text('Informe um número válido'), findsNWidgets(3));
+    expect(find.text('Informe um número válido'), findsNWidgets(2));
 
     await tester.enterText(find.byType(TextFormField).at(0), 'Meio ambiente');
     await tester.enterText(find.byType(TextFormField).at(1), '101');
     await tester.enterText(find.byType(TextFormField).at(2), '-1');
-    await tester.enterText(find.byType(TextFormField).at(3), '2,8');
     await tester.scrollUntilVisible(
       find.text('Continuar'),
       200,

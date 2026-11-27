@@ -7,6 +7,7 @@ import '../../domain/entities/building_alert.dart';
 import '../../domain/entities/rule_settings.dart';
 import '../../domain/entities/site.dart';
 import '../../domain/entities/suggestion.dart';
+import '../../domain/entities/analysis_input.dart';
 import '../../domain/services/building_rule_checker.dart';
 import '../../domain/services/suggestion_engine.dart';
 import '../../../report/presentation/pages/report_page.dart';
@@ -20,6 +21,7 @@ class AlertsPage extends StatefulWidget {
   final FloorPlan? floorPlan;
   final Site site; // terreno original, usado em "Restaurar"
   final RuleSettings settings;
+  final ValueChanged<AnalysisInput>? onAnalysisChanged;
 
   const AlertsPage({
     super.key,
@@ -27,6 +29,7 @@ class AlertsPage extends StatefulWidget {
     this.floorPlan,
     required this.site,
     required this.settings,
+    this.onAnalysisChanged,
   });
 
   @override
@@ -47,12 +50,18 @@ class _AlertsPageState extends State<AlertsPage> {
     if (adjusted == null) return;
 
     setState(() => _site = adjusted);
+    widget.onAnalysisChanged?.call(
+      AnalysisInput(site: adjusted, settings: widget.settings),
+    );
     ScaffoldMessenger.of(context)
         .showSnackBar(const SnackBar(content: Text('Sugestão aplicada!')));
   }
 
   void _restore() {
     setState(() => _site = widget.site);
+    widget.onAnalysisChanged?.call(
+      AnalysisInput(site: widget.site, settings: widget.settings),
+    );
   }
 
   /// Abre o relatório em PDF com a posição atual da construção.
@@ -87,8 +96,9 @@ class _AlertsPageState extends State<AlertsPage> {
       occupiedAreaM2: widget.floorPlan?.builtAreaM2,
     );
 
-    final int attention =
-        alerts.where((a) => a.severity != AlertSeverity.info).length;
+    final int attention = alerts
+        .where((a) => a.severity != AlertSeverity.info)
+        .length;
 
     return Scaffold(
       appBar: AppBar(
@@ -219,20 +229,20 @@ class _SeverityStyle {
 _SeverityStyle _styleFor(AlertSeverity severity) {
   return switch (severity) {
     AlertSeverity.error => const _SeverityStyle(
-        Color(0xFFC62828),
-        Color(0xFFFDECEA),
-        Icons.error_outline,
-      ),
+      Color(0xFFC62828),
+      Color(0xFFFDECEA),
+      Icons.error_outline,
+    ),
     AlertSeverity.warning => const _SeverityStyle(
-        Color(0xFFE65100),
-        Color(0xFFFFF3E0),
-        Icons.warning_amber_rounded,
-      ),
+      Color(0xFFE65100),
+      Color(0xFFFFF3E0),
+      Icons.warning_amber_rounded,
+    ),
     AlertSeverity.info => const _SeverityStyle(
-        AppColors.primary,
-        Colors.white,
-        Icons.check_circle_outline,
-      ),
+      AppColors.primary,
+      Colors.white,
+      Icons.check_circle_outline,
+    ),
   };
 }
 
